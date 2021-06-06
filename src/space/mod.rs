@@ -1,6 +1,8 @@
 use crate::geometry::{Mat3, Quadrant, Vec3, NB_QUADRANTS};
 use std::collections::HashSet;
 
+pub mod entity;
+
 pub const SPACE_CELL_SIZE: u32 = 1024 * 1024;
 pub const TICK_DIV: i64 = 1_000_000;
 
