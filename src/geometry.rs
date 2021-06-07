@@ -18,6 +18,14 @@ impl Vec3 {
         }
     }
 
+    pub fn sub(&self, other: &Vec3) -> Self {
+        Self {
+            x: self.x - other.x,
+            y: self.y - other.y,
+            z: self.z - other.z,
+        }
+    }
+
     pub fn mul_scalar(&self, v: i64) -> Self {
         Self {
             x: self.x * v,
@@ -35,7 +43,11 @@ impl Vec3 {
     }
 
     pub fn is_inside_centered_cube(&self, side_length: i64) -> bool {
-        self.x.abs() < side_length && self.y.abs() < side_length && self.z.abs() < side_length
+        let min = -side_length;
+        let max = side_length - 1;
+        (self.x > min || self.x < max)
+            && (self.y > min || self.y < max)
+            && (self.z > min || self.z < max)
     }
 
     pub fn get_quadrant(&self) -> Quadrant {
@@ -50,12 +62,10 @@ pub struct Mat3 {
 }
 
 impl Mat3 {
-    pub fn identity() -> Self {
-        Self {
-            divider: 1,
-            values: [1, 0, 0, 0, 1, 0, 0, 0, 1],
-        }
-    }
+    pub const IDENTITY: Self = Self {
+        divider: 1,
+        values: [1, 0, 0, 0, 1, 0, 0, 0, 1],
+    };
 
     pub fn mul_vec(&self, vec: &Vec3) -> Vec3 {
         Vec3 {
@@ -93,6 +103,18 @@ pub enum Quadrant {
 }
 
 impl Quadrant {
+    pub fn x_p(&self) -> bool {
+        *self as usize & (1 << 2) != 0
+    }
+
+    pub fn y_p(&self) -> bool {
+        *self as usize & (1 << 1) != 0
+    }
+
+    pub fn z_p(&self) -> bool {
+        *self as usize & (1 << 0) != 0
+    }
+
     pub fn from_pos(pos: &Vec3) -> Self {
         let val = (pos.x >= 0) as usize * (1 << 2)
             + (pos.y >= 0) as usize * (1 << 1)
@@ -115,3 +137,31 @@ impl Quadrant {
 }
 
 pub const NB_QUADRANTS: usize = 8;
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct Sphere {
+    pub center: Vec3,
+    pub radius: i64,
+}
+
+impl Sphere {
+    pub fn div_scalar(&self, value: i64) -> Self {
+        Self {
+            center: self.center,
+            radius: self.radius / value,
+        }
+    }
+
+    pub fn add_vector(&self, v: Vec3) -> Self {
+        Self {
+            center: self.center.add(&v),
+            radius: self.radius,
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct Cube {
+    pub origin: Vec3,
+    pub size: i64,
+}

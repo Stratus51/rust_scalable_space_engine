@@ -11,3 +11,5 @@ num = "0.4"
 num-derive = "0.3"
 num-traits = "0.2"
 
+# Graphic stuff
+minifb = "0.19.3"
