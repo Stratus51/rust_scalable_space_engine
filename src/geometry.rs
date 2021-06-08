@@ -89,6 +89,37 @@ pub enum Direction {
     Zn = 5,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum FineDirection {
+    XnYnZn,
+    XnYnZz,
+    XnYnZp,
+    XnYzZn,
+    XnYzZz,
+    XnYzZp,
+    XnYpZn,
+    XnYpZz,
+    XnYpZp,
+    XzYnZn,
+    XzYnZz,
+    XzYnZp,
+    XzYzZn,
+    // XzYzZz,
+    XzYzZp,
+    XzYpZn,
+    XzYpZz,
+    XzYpZp,
+    XpYnZn,
+    XpYnZz,
+    XpYnZp,
+    XpYzZn,
+    XpYzZz,
+    XpYzZp,
+    XpYpZn,
+    XpYpZz,
+    XpYpZp,
+}
+
 #[repr(usize)]
 #[derive(FromPrimitive, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Quadrant {

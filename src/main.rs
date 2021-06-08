@@ -3,16 +3,16 @@ extern crate num;
 extern crate num_derive;
 extern crate minifb;
 
+mod entity;
 mod geometry;
 mod matter_tree;
 mod space;
-mod space_entity;
 mod space_tree;
 mod voxel_grid;
 
+use entity::{Entity, EntityData};
 use geometry::{Quadrant, Sphere, Vec3};
 use space::{Space, SpaceConfiguration, SPACE_CELL_SIZE};
-use space_entity::{SpaceEntity, SpaceEntityData};
 use space_tree::SpaceTree;
 
 const WIDTH: usize = 640;
@@ -93,12 +93,12 @@ fn main() {
         gravity_threshold: 0, // cm/s^2
     });
 
-    space.insert_entity(Box::new(SpaceEntity::new(
+    space.insert_entity(Box::new(Entity::new(
         Sphere {
             center: Vec3 { x: 0, y: 0, z: 0 },
             radius: 1,
         },
-        SpaceEntityData::Creature,
+        EntityData::Creature,
     )));
 
     let colors = Colors {

@@ -1,14 +1,17 @@
+use crate::entity::Entity;
 use crate::geometry::{Quadrant, NB_QUADRANTS};
-use crate::matter_tree::{CellLocalisable, CellPart};
-use crate::space_entity::SpaceEntity;
+use crate::matter_tree::{CellPart, MatterTree};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SpaceTree {
+pub enum SpaceTree {
+    Parent(SpaceTreeParent),
+    Matter(MatterTree),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpaceTreeParent {
     pub scale: u32,
     pub sub_trees: [Option<Box<Self>>; NB_QUADRANTS],
-    pub entities: Vec<Box<SpaceEntity>>,
-
-    scale_factor: i64,
 }
 
 enum QuadrantMoveOperation {
@@ -20,21 +23,9 @@ impl SpaceTree {
     const NONE_SPACE_CELL: Option<Box<Self>> = None;
 
     pub fn new(scale: u32) -> Self {
-        // Objects can't be bigger than 0x4FFF_FFFF_FFFF_FFFF.
-        // Thus no point in having a bigger scale factor than that.
-        let mut scale_factor = 0x4000_0000_0000_0000;
-        if scale < 64 {
-            scale_factor = 1;
-            for _ in 0..scale {
-                scale_factor *= 2;
-            }
-        }
-
         Self {
             scale,
             sub_trees: [Self::NONE_SPACE_CELL; NB_QUADRANTS],
-            entities: vec![],
-            scale_factor,
         }
     }
 
