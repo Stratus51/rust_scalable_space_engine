@@ -31,9 +31,21 @@ impl MatterTree {
         - 1 // Remove sign
         - Self::MIN_SIZE_POW as u32 // Remove scales taken up by min size cells
         - 1; // Margin
+    const MAX_SIZE: i64 = 1 << (Self::MIN_SIZE_POW + Self::MAX_SCALE as i64);
     const NONE_SPACE_CELL: Option<Box<Self>> = None;
 
-    pub fn new(area: Cube) -> Self {
+    pub fn new() -> Self {
+        Self::new_sub_tree(Cube {
+            origin: Vec3 {
+                x: -Self::MAX_SIZE / 2,
+                y: -Self::MAX_SIZE / 2,
+                z: -Self::MAX_SIZE / 2,
+            },
+            size: Self::MAX_SIZE,
+        })
+    }
+
+    fn new_sub_tree(area: Cube) -> Self {
         Self {
             scale: Self::MAX_SCALE,
             sub_trees: [Self::NONE_SPACE_CELL; NB_QUADRANTS],
@@ -48,7 +60,7 @@ impl MatterTree {
             let parent = &self.area;
             let origin = parent.origin;
             let size = parent.size / 2;
-            self.sub_trees[quadrant_i] = Some(Box::new(Self::new(Cube {
+            self.sub_trees[quadrant_i] = Some(Box::new(Self::new_sub_tree(Cube {
                 origin: Vec3 {
                     x: origin.x + quadrant.x_p() as i64 * size,
                     y: origin.y + quadrant.y_p() as i64 * size,
@@ -219,7 +231,7 @@ impl MatterTree {
         }
     }
 
-    pub fn get_outsiders(&mut self) -> Vec<(&mut Box<Entity>, Vec<FineDirection>)> {
+    pub fn get_entities_touching_outside(&mut self) -> Vec<(&mut Box<Entity>, Vec<FineDirection>)> {
         let Self { entities, area, .. } = self;
         self.entities
             .iter_mut()
