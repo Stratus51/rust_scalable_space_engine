@@ -50,5 +50,68 @@ impl SpaceTree {
         }
     }
 
-    pub fn refresh(&mut self) -> Vec<EntityToDisplaceUp> {}
+    pub fn get_displaced_outsider(entity: Box<Entity>) -> EntityToDisplaceUp {
+        EntityToDisplaceUp {
+            path: vec![],
+            direction: FineDirection::from_outsider_pos(
+                &entity.bounding_sphere.center,
+                MatterTree::MAX_SIZE,
+            ),
+            entity,
+        }
+    }
+
+    pub fn add_entities(&mut self, entities: Vec<EntityToDisplaceDown>) {}
+
+    pub fn refresh(&mut self) -> Vec<EntityToDisplaceUp> {
+        match self {
+            Self::Matter(cell) => {
+                let outsiders = cell.refresh();
+                outsiders
+                    .into_iter()
+                    .map(Self::get_displaced_outsider)
+                    .collect()
+            }
+            Self::Parent(parent) => {
+                let mut outsiders = vec![];
+                let mut relocate = [vec![]; NB_QUADRANTS];
+                for (i, child) in parent.sub_trees.iter_mut().enumerate() {
+                    if let Some(child) = child {
+                        let quadrant: Quadrant = num::FromPrimitive::from_usize(i).unwrap();
+                        let sub_outsiders = child.refresh();
+                        for displaced_outsider in sub_outsiders.into_iter() {
+                            if let Some(relocation) = quadrant.move_to(displaced_outsider.direction)
+                            {
+                                relocate[relocation as usize].push(EntityToDisplaceDown {
+                                    path: displaced_outsider.path,
+                                    entity: displaced_outsider.entity,
+                                });
+                            } else {
+                                displaced_outsider
+                                    .path
+                                    .push(quadrant.mirror(displaced_outsider.direction));
+                                outsiders.push(displaced_outsider);
+                            }
+                        }
+                    }
+                }
+                for (i, entities) in relocate.into_iter().enumerate() {
+                    if parent.sub_trees[i].is_none() {
+                        if parent.scale == 0 {
+                            parent.sub_trees[i] = Some(Box::new(Self::Matter(MatterTree::new())));
+                        } else {
+                            parent.sub_trees[i] = Some(Box::new(Self::Parent(SpaceTreeParent {
+                                scale: parent.scale - 1,
+                                sub_trees: [Self::NONE_SPACE_CELL; NB_QUADRANTS],
+                            })));
+                        }
+                    }
+                    // TODO Is there a cleaner Rust way to write this?
+                    let sub_tree = parent.sub_trees[i].unwrap();
+                    sub_tree.add_entities(entities);
+                }
+                outsiders
+            }
+        }
+    }
 }

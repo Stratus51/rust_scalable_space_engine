@@ -89,35 +89,56 @@ pub enum Direction {
     Zn = 5,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[repr(u8)]
+#[derive(FromPrimitive, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum FineDirection {
-    XnYnZn,
-    XnYnZz,
-    XnYnZp,
-    XnYzZn,
-    XnYzZz,
-    XnYzZp,
-    XnYpZn,
-    XnYpZz,
-    XnYpZp,
-    XzYnZn,
-    XzYnZz,
-    XzYnZp,
-    XzYzZn,
-    // XzYzZz,
-    XzYzZp,
-    XzYpZn,
-    XzYpZz,
-    XzYpZp,
-    XpYnZn,
-    XpYnZz,
-    XpYnZp,
-    XpYzZn,
-    XpYzZz,
-    XpYzZp,
-    XpYpZn,
-    XpYpZz,
-    XpYpZp,
+    XnYnZn = 0,
+    XnYnZz = 1,
+    XnYnZp = 2,
+    XnYzZn = 3,
+    XnYzZz = 4,
+    XnYzZp = 5,
+    XnYpZn = 6,
+    XnYpZz = 7,
+    XnYpZp = 8,
+    XzYnZn = 9,
+    XzYnZz = 10,
+    XzYnZp = 11,
+    XzYzZn = 12,
+    XzYzZz = 13,
+    XzYzZp = 14,
+    XzYpZn = 15,
+    XzYpZz = 16,
+    XzYpZp = 17,
+    XpYnZn = 18,
+    XpYnZz = 19,
+    XpYnZp = 20,
+    XpYzZn = 21,
+    XpYzZz = 22,
+    XpYzZp = 23,
+    XpYpZn = 24,
+    XpYpZz = 25,
+    XpYpZp = 26,
+}
+
+impl FineDirection {
+    fn component(pos: i64, size: i64) -> u8 {
+        if pos < -size {
+            0
+        } else if pos < size {
+            1
+        } else {
+            2
+        }
+    }
+
+    pub fn from_outsider_pos(pos: &Vec3, size: i64) -> Self {
+        let x = Self::component(pos.x, size);
+        let y = Self::component(pos.y, size);
+        let z = Self::component(pos.z, size);
+        let val = x * 3 * 3 + y * 3 + z;
+        num::FromPrimitive::from_u8(val).unwrap()
+    }
 }
 
 #[repr(usize)]
@@ -165,6 +186,10 @@ impl Quadrant {
             Self::XpYpZp => Self::XnYnZn,
         }
     }
+
+    pub fn move_to(&self, direction: FineDirection) -> Option<Self> {}
+
+    pub fn mirror(&self, direction: FineDirection) -> Self {}
 }
 
 pub const NB_QUADRANTS: usize = 8;

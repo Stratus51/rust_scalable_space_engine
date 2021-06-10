@@ -26,12 +26,12 @@ enum QuadrantMoveOperation {
 
 impl MatterTree {
     const MIN_SIZE_POW: i64 = 20;
-    const MIN_SIZE: i64 = 1 << Self::MIN_SIZE_POW;
+    pub const MIN_SIZE: i64 = 1 << Self::MIN_SIZE_POW;
     const MAX_SCALE: u32 = 64 // Max
         - 1 // Remove sign
         - Self::MIN_SIZE_POW as u32 // Remove scales taken up by min size cells
         - 1; // Margin
-    const MAX_SIZE: i64 = 1 << (Self::MIN_SIZE_POW + Self::MAX_SCALE as i64);
+    pub const MAX_SIZE: i64 = 1 << (Self::MIN_SIZE_POW + Self::MAX_SCALE as i64);
     const NONE_SPACE_CELL: Option<Box<Self>> = None;
 
     pub fn new() -> Self {
