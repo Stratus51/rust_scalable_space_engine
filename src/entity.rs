@@ -65,25 +65,19 @@ impl Entity {
         };
         let area_center = area.origin.add(&half_size);
         let area_size = area.size;
-        let relative_sphere_center = self.bounding_sphere.center.sub(&area_center);
-        let radius = self.bounding_sphere.radius;
-        if !relative_sphere_center.is_inside_centered_cube(area_size) {
+        let relative_sphere = self.bounding_sphere.sub_to_center(&area_center);
+        if !relative_sphere.center.is_inside_centered_cube(area_size) {
             return CellPart::CenterOutside;
         }
-        if !relative_sphere_center.is_inside_centered_cube(area_size - radius) {
+        if !relative_sphere
+            .center
+            .is_inside_centered_cube(area_size - relative_sphere.radius)
+        {
             return CellPart::PartlyOutside;
         }
 
         for i in 0..NB_QUADRANTS {
-            let shift = Vec3 {
-                x: (i & (1 << 2)) as i64,
-                y: (i & (1 << 2)) as i64,
-                z: (i & (1 << 2)) as i64,
-            }
-            .mul_scalar(area_size)
-            .sub(&half_size);
-            let shifted_center = relative_sphere_center.sub(&shift);
-            if shifted_center.is_inside_centered_cube(area_size / 2 - radius) {
+            if relative_sphere.is_inside_quadrant(area_size, i) {
                 return CellPart::Quadrant(num::FromPrimitive::from_usize(i).unwrap());
             }
         }
@@ -115,6 +109,13 @@ impl Entity {
             }
         }
         ret
+    }
+
+    pub fn switch_space_tree(&mut self, direction: Vec3, cell_size: i64) {
+        self.bounding_sphere.center = self
+            .bounding_sphere
+            .center
+            .sub(&direction.mul_scalar(cell_size));
     }
 
     pub fn check_collision(&self, other: &mut Self) -> bool {

@@ -139,6 +139,23 @@ impl FineDirection {
         let val = x * 3 * 3 + y * 3 + z;
         num::FromPrimitive::from_u8(val).unwrap()
     }
+
+    pub fn outsider_direction_vec(pos: &Vec3, size: i64) -> Vec3 {
+        let x = Self::component(pos.x, size) as i64 - 1;
+        let y = Self::component(pos.y, size) as i64 - 1;
+        let z = Self::component(pos.z, size) as i64 - 1;
+        Vec3 { x, y, z }
+    }
+
+    pub fn equivalent_vec(&self) -> Vec3 {
+        let mut val = *self as i64;
+        let x = val / 3 - 1;
+        val %= 3;
+        let y = val / 3 - 1;
+        val %= 3;
+        let z = val - 1;
+        Vec3 { x, y, z }
+    }
 }
 
 #[repr(usize)]
@@ -187,9 +204,25 @@ impl Quadrant {
         }
     }
 
-    pub fn move_to(&self, direction: FineDirection) -> Option<Self> {}
+    pub fn move_to(&self, direction: Vec3) -> Option<Self> {
+        let x = self.x_p() as i64 + direction.x;
+        let y = self.y_p() as i64 + direction.y;
+        let z = self.z_p() as i64 + direction.z;
+        if x > 2 || y > 2 || z > 2 || x < 0 || y < 0 || z < 0 {
+            None
+        } else {
+            let val = (x << 2) + (y << 1) + z;
+            Some(num::FromPrimitive::from_i64(val).unwrap())
+        }
+    }
 
-    pub fn mirror(&self, direction: FineDirection) -> Self {}
+    pub fn mirror(&self, direction: Vec3) -> Self {
+        let x = self.x_p() ^ (direction.x != 0);
+        let y = self.y_p() ^ (direction.y != 0);
+        let z = self.z_p() ^ (direction.z != 0);
+        let val = ((x as u8) << 2) + ((y as u8) << 1) + z as u8;
+        num::FromPrimitive::from_u8(val).unwrap()
+    }
 }
 
 pub const NB_QUADRANTS: usize = 8;
@@ -208,11 +241,36 @@ impl Sphere {
         }
     }
 
-    pub fn add_vector(&self, v: Vec3) -> Self {
+    pub fn add_to_center(&self, v: &Vec3) -> Self {
         Self {
             center: self.center.add(&v),
             radius: self.radius,
         }
+    }
+
+    pub fn sub_to_center(&self, v: &Vec3) -> Self {
+        Self {
+            center: self.center.sub(&v),
+            radius: self.radius,
+        }
+    }
+
+    pub fn is_inside_quadrant(&self, cell_size: i64, quadrant: usize) -> bool {
+        let half_size = cell_size / 2;
+        let half_vec = Vec3 {
+            x: half_size,
+            y: half_size,
+            z: half_size,
+        };
+        let shift = Vec3 {
+            x: (quadrant as i64 & (1 << 2)) as i64,
+            y: (quadrant as i64 & (1 << 2)) as i64,
+            z: (quadrant as i64 & (1 << 2)) as i64,
+        }
+        .mul_scalar(cell_size)
+        .sub(&half_vec);
+        let shifted_center = self.center.sub(&shift);
+        shifted_center.is_inside_centered_cube(half_size - self.radius)
     }
 }
 

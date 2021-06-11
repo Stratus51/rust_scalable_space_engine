@@ -1,6 +1,5 @@
 use crate::entity::Entity;
 use crate::geometry::{Cube, FineDirection, Quadrant, Vec3, NB_QUADRANTS};
-use itertools::Itertools;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum CellPart {
@@ -35,74 +34,86 @@ impl MatterTree {
     const NONE_SPACE_CELL: Option<Box<Self>> = None;
 
     pub fn new() -> Self {
-        Self::new_sub_tree(Cube {
-            origin: Vec3 {
-                x: -Self::MAX_SIZE / 2,
-                y: -Self::MAX_SIZE / 2,
-                z: -Self::MAX_SIZE / 2,
+        Self::new_tree(
+            Self::MAX_SCALE,
+            Cube {
+                origin: Vec3 {
+                    x: -Self::MAX_SIZE / 2,
+                    y: -Self::MAX_SIZE / 2,
+                    z: -Self::MAX_SIZE / 2,
+                },
+                size: Self::MAX_SIZE,
             },
-            size: Self::MAX_SIZE,
-        })
+        )
     }
 
-    fn new_sub_tree(area: Cube) -> Self {
+    fn new_tree(scale: u32, area: Cube) -> Self {
         Self {
-            scale: Self::MAX_SCALE,
+            scale,
             sub_trees: [Self::NONE_SPACE_CELL; NB_QUADRANTS],
             entities: vec![],
             area,
         }
     }
 
-    fn move_entities_to_quadrant(&mut self, entity: Box<Entity>, quadrant: Quadrant) {
-        let quadrant_i = quadrant as usize;
-        if self.sub_trees[quadrant_i].is_none() {
-            let parent = &self.area;
-            let origin = parent.origin;
-            let size = parent.size / 2;
-            self.sub_trees[quadrant_i] = Some(Box::new(Self::new_sub_tree(Cube {
+    fn new_sub_tree(&self, quadrant: Quadrant) -> Self {
+        let origin = self.area.origin;
+        let size = self.area.size;
+        Self::new_tree(
+            self.scale - 1,
+            Cube {
                 origin: Vec3 {
                     x: origin.x + quadrant.x_p() as i64 * size,
                     y: origin.y + quadrant.y_p() as i64 * size,
                     z: origin.z + quadrant.z_p() as i64 * size,
                 },
                 size,
-            })));
+            },
+        )
+    }
+
+    fn move_entities_to_quadrant(&mut self, entities: Vec<Box<Entity>>, quadrant: Quadrant) {
+        let quadrant_i = quadrant as usize;
+        if self.sub_trees[quadrant_i].is_none() {
+            self.sub_trees[quadrant_i] = Some(Box::new(self.new_sub_tree(quadrant)));
         }
+        // TODO Cleaner way to do this in rust?
         self.sub_trees[quadrant_i]
             .as_mut()
             .unwrap()
-            .add_entity(entity);
+            .add_entities(entities);
     }
 
-    pub fn add_entity(&mut self, mut entity: Box<Entity>) -> Option<Box<Entity>> {
+    fn center(&self) -> Vec3 {
+        let half = self.area.size / 2;
+        self.area.origin.add(&Vec3 {
+            x: half,
+            y: half,
+            z: half,
+        })
+    }
+
+    pub fn add_entities(&mut self, mut entities: Vec<Box<Entity>>) {
         // TODO Is that the right condition to decide whether to split the space?
-        if self.entities.is_empty() {
-            self.entities.push(entity);
-            None
+        if self.entities.len() + entities.len() == 1 || self.scale == 0 {
+            self.entities.extend(entities);
         } else {
-            match entity.get_containing_cell_part(&self.area) {
-                CellPart::Quadrant(quadrant) => {
-                    if self.scale > 0 {
-                        self.move_entities_to_quadrant(entity, quadrant);
-                    } else {
-                        self.entities.push(entity);
-                    }
-                    None
-                }
-                CellPart::MultiQuadrant => {
+            let mut per_quadrant = vec![vec![]; NB_QUADRANTS];
+            for entity in entities.into_iter() {
+                let relative_sphere = entity.bounding_sphere.sub_to_center(&self.center());
+                let quadrant = Quadrant::from_pos(&relative_sphere.center);
+                if relative_sphere.is_inside_quadrant(self.area.size, quadrant as usize) {
+                    per_quadrant[quadrant as usize].push(entity);
+                } else {
                     self.entities.push(entity);
-                    None
                 }
-                CellPart::CenterOutside => Some(entity),
-                CellPart::PartlyOutside => {
-                    if self.scale == Self::MAX_SCALE {
-                        self.entities.push(entity);
-                        None
-                    } else {
-                        Some(entity)
-                    }
-                }
+            }
+
+            for (i, entities) in per_quadrant.into_iter().enumerate() {
+                self.move_entities_to_quadrant(
+                    entities,
+                    num::FromPrimitive::from_usize(i).unwrap(),
+                );
             }
         }
     }
@@ -134,19 +145,19 @@ impl MatterTree {
         }
 
         // Apply entity cell boundary crossing
+        let mut insiders = vec![vec![]; NB_QUADRANTS];
         let mut outsiders = vec![];
         for (i, quitter) in quitters.into_iter().rev() {
             let entity = self.entities.remove(i);
             match quitter {
                 QuadrantMoveOperation::ToUpperCell => outsiders.push(entity),
                 QuadrantMoveOperation::ToSubCell { quadrant } => {
-                    self.move_entities_to_quadrant(entity, quadrant)
+                    insiders[quadrant as usize].push(entity);
                 }
             }
         }
 
         // Run quadrants
-        let mut to_move = vec![];
         {
             let Self {
                 sub_trees,
@@ -171,7 +182,7 @@ impl MatterTree {
                             }
                             CellPart::Quadrant(quadrant) => {
                                 if self.scale > 0 {
-                                    to_move.push((entity, quadrant));
+                                    insiders[quadrant as usize].push(entity);
                                 }
                             }
                         }
@@ -179,8 +190,9 @@ impl MatterTree {
                 }
             }
         }
-        for (mut entity, quadrant) in to_move.into_iter() {
-            self.move_entities_to_quadrant(entity, quadrant);
+
+        for (i, entities) in insiders.into_iter().enumerate() {
+            self.move_entities_to_quadrant(entities, num::FromPrimitive::from_usize(i).unwrap());
         }
 
         // Clean empty quadrants
