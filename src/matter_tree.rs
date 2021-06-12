@@ -9,11 +9,13 @@ pub enum CellPart {
     Quadrant(Quadrant),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+type Entities = Vec<Box<Entity>>;
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct MatterTree {
     pub scale: u32,
     pub sub_trees: [Option<Box<Self>>; NB_QUADRANTS],
-    pub entities: Vec<Box<Entity>>,
+    pub entities: Entities,
 
     pub area: Cube,
 }
@@ -24,12 +26,13 @@ enum QuadrantMoveOperation {
 }
 
 impl MatterTree {
-    const MIN_SIZE_POW: i64 = 20;
+    const MIN_SIZE_POW: i64 = 5;
     pub const MIN_SIZE: i64 = 1 << Self::MIN_SIZE_POW;
     const MAX_SCALE: u32 = 64 // Max
         - 1 // Remove sign
         - Self::MIN_SIZE_POW as u32 // Remove scales taken up by min size cells
-        - 1; // Margin
+        - 1 // Margin
+        - 50; // Manual testing
     pub const MAX_SIZE: i64 = 1 << (Self::MIN_SIZE_POW + Self::MAX_SCALE as i64);
     const NONE_SPACE_CELL: Option<Box<Self>> = None;
 
@@ -58,7 +61,7 @@ impl MatterTree {
 
     fn new_sub_tree(&self, quadrant: Quadrant) -> Self {
         let origin = self.area.origin;
-        let size = self.area.size;
+        let size = self.area.size / 2;
         Self::new_tree(
             self.scale - 1,
             Cube {
@@ -72,7 +75,7 @@ impl MatterTree {
         )
     }
 
-    fn move_entities_to_quadrant(&mut self, entities: Vec<Box<Entity>>, quadrant: Quadrant) {
+    fn move_entities_to_quadrant(&mut self, entities: Entities, quadrant: Quadrant) {
         let quadrant_i = quadrant as usize;
         if self.sub_trees[quadrant_i].is_none() {
             self.sub_trees[quadrant_i] = Some(Box::new(self.new_sub_tree(quadrant)));
@@ -93,9 +96,9 @@ impl MatterTree {
         })
     }
 
-    pub fn add_entities(&mut self, mut entities: Vec<Box<Entity>>) {
+    pub fn add_entities(&mut self, entities: Entities) {
         // TODO Is that the right condition to decide whether to split the space?
-        if self.entities.len() + entities.len() == 1 || self.scale == 0 {
+        if self.entities.len() + entities.len() <= 1 || self.scale == 0 {
             self.entities.extend(entities);
         } else {
             let mut per_quadrant = vec![vec![]; NB_QUADRANTS];
@@ -110,10 +113,12 @@ impl MatterTree {
             }
 
             for (i, entities) in per_quadrant.into_iter().enumerate() {
-                self.move_entities_to_quadrant(
-                    entities,
-                    num::FromPrimitive::from_usize(i).unwrap(),
-                );
+                if !entities.is_empty() {
+                    self.move_entities_to_quadrant(
+                        entities,
+                        num::FromPrimitive::from_usize(i).unwrap(),
+                    );
+                }
             }
         }
     }
@@ -122,13 +127,15 @@ impl MatterTree {
         self.sub_trees.iter().all(|cell| cell.is_none()) && self.entities.is_empty()
     }
 
-    pub fn refresh(&mut self) -> Vec<Box<Entity>> {
+    pub fn refresh(&mut self) -> Entities {
         let mut quitters = vec![];
 
         // Run each entity dynamics and catch crossing cell boundaries
         for (i, entity) in self.entities.iter_mut().enumerate() {
             // Check if entity should change cell
-            match entity.get_containing_cell_part(&self.area) {
+            let cell_part = entity.get_containing_cell_part(&self.area);
+            println!("Cell part: {:?}", cell_part);
+            match cell_part {
                 CellPart::MultiQuadrant => (),
                 CellPart::PartlyOutside => {
                     if self.scale < Self::MAX_SCALE {
@@ -165,9 +172,9 @@ impl MatterTree {
                 area,
                 ..
             } = self;
-            for (i, quad) in sub_trees.iter_mut().enumerate() {
+            for quad in sub_trees.iter_mut() {
                 if let Some(quad) = quad {
-                    for mut entity in quad.refresh().into_iter() {
+                    for entity in quad.refresh().into_iter() {
                         match entity.get_containing_cell_part(area) {
                             CellPart::MultiQuadrant => {
                                 entities.push(entity);
@@ -191,8 +198,19 @@ impl MatterTree {
             }
         }
 
-        for (i, entities) in insiders.into_iter().enumerate() {
-            self.move_entities_to_quadrant(entities, num::FromPrimitive::from_usize(i).unwrap());
+        if self.entities.len() + insiders.iter().map(|v| v.len()).sum::<usize>() == 1 {
+            for insider in insiders.into_iter() {
+                self.entities.extend(insider);
+            }
+        } else {
+            for (i, entities) in insiders.into_iter().enumerate() {
+                if !entities.is_empty() {
+                    self.move_entities_to_quadrant(
+                        entities,
+                        num::FromPrimitive::from_usize(i).unwrap(),
+                    );
+                }
+            }
         }
 
         // Clean empty quadrants
@@ -217,7 +235,7 @@ impl MatterTree {
         let area = &self.area;
         for i in 0..self.entities.len() {
             let (source, remainder) = self.entities.split_at_mut(i + 1);
-            let mut source = source.last_mut().unwrap();
+            let source = source.last_mut().unwrap();
             for e in remainder.iter_mut() {
                 source.apply_collision(e);
             }
@@ -230,21 +248,21 @@ impl MatterTree {
             entities,
             ..
         } = self;
-        for i in 0..NB_QUADRANTS {
-            if let Some(quad) = sub_trees[i].as_mut() {
-                let relevant_entities: Vec<_> = entities
+        for (i, sub_tree) in sub_trees.iter_mut().enumerate() {
+            if let Some(quad) = sub_tree {
+                let mut relevant_entities: Vec<_> = entities
                     .iter_mut()
                     .enumerate()
                     .filter(|(j, _)| entity_quadrant[*j].contains(&(i as u8)))
                     .map(|(_, e)| e)
                     .collect();
-                quad.apply_external_collisions(&relevant_entities[..]);
+                quad.apply_external_collisions(&mut relevant_entities[..]);
             }
         }
     }
 
     pub fn get_entities_touching_outside(&mut self) -> Vec<(&mut Box<Entity>, Vec<FineDirection>)> {
-        let Self { entities, area, .. } = self;
+        let area = &self.area;
         self.entities
             .iter_mut()
             .filter_map(|e| {
@@ -258,10 +276,21 @@ impl MatterTree {
             .collect()
     }
 
-    pub fn apply_external_collisions(&mut self, outsiders: &[&mut Box<Entity>]) {
+    pub fn apply_external_collisions(&mut self, outsiders: &mut [&mut Box<Entity>]) {
         for a in self.entities.iter_mut() {
             for b in outsiders.iter_mut() {
                 a.apply_collision(b);
+            }
+        }
+    }
+
+    pub fn run_movements(&mut self) {
+        for entity in self.entities.iter_mut() {
+            entity.run_movement();
+        }
+        for sub_tree in self.sub_trees.iter_mut() {
+            if let Some(tree) = sub_tree {
+                tree.run_movements();
             }
         }
     }

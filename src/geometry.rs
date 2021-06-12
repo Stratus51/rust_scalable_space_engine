@@ -6,9 +6,7 @@ pub struct Vec3 {
 }
 
 impl Vec3 {
-    pub fn zero() -> Self {
-        Self { x: 0, y: 0, z: 0 }
-    }
+    pub const ZERO: Self = Self { x: 0, y: 0, z: 0 };
 
     pub fn add(&self, other: &Vec3) -> Self {
         Self {
@@ -42,16 +40,73 @@ impl Vec3 {
         }
     }
 
+    pub fn div_float(&self, v: f64) -> Self {
+        Self {
+            x: (self.x as f64 / v) as i64,
+            y: (self.y as f64 / v) as i64,
+            z: (self.z as f64 / v) as i64,
+        }
+    }
+
     pub fn is_inside_centered_cube(&self, side_length: i64) -> bool {
-        let min = -side_length;
-        let max = side_length - 1;
-        (self.x > min || self.x < max)
-            && (self.y > min || self.y < max)
-            && (self.z > min || self.z < max)
+        let min = -side_length / 2;
+        let max = side_length / 2 - 1;
+        let ret = (self.x > min && self.x < max)
+            && (self.y > min && self.y < max)
+            && (self.z > min && self.z < max);
+        println!(
+            "is_inside_centered_cube: side = {} | min = {} | max = {} | ret = {}",
+            side_length, min, max, ret
+        );
+        ret
     }
 
     pub fn get_quadrant(&self) -> Quadrant {
         Quadrant::from_pos(self)
+    }
+
+    pub fn direction_components(&self) -> Vec<Direction> {
+        let mut ret = vec![];
+        if self.x > 0 {
+            ret.push(Direction::Xp);
+        } else if self.x < 0 {
+            ret.push(Direction::Xn);
+        }
+        if self.y > 0 {
+            ret.push(Direction::Yp);
+        } else if self.y < 0 {
+            ret.push(Direction::Yn);
+        }
+        if self.z > 0 {
+            ret.push(Direction::Zp);
+        } else if self.z < 0 {
+            ret.push(Direction::Zn);
+        }
+        ret
+    }
+
+    pub fn distance(&self) -> f64 {
+        let x = self.x as f64;
+        let y = self.y as f64;
+        let z = self.z as f64;
+        f64::sqrt(x * x + y * y + z * z)
+    }
+
+    pub fn remove_matching_quadrant_component(&self, quadrant: Quadrant) -> Self {
+        let mut ret = *self;
+        let quad_x_pos = quadrant.x_p();
+        if (quad_x_pos && self.x > 0) || (!quad_x_pos && self.x < 0) {
+            ret.x = 0;
+        }
+        let quad_y_pos = quadrant.y_p();
+        if (quad_y_pos && self.y > 0) || !quad_y_pos && self.y < 0 {
+            ret.y = 0;
+        }
+        let quad_z_pos = quadrant.z_p();
+        if (quad_z_pos && self.z > 0) || (!quad_z_pos && self.z < 0) {
+            ret.z = 0;
+        }
+        ret
     }
 }
 
@@ -88,6 +143,8 @@ pub enum Direction {
     Yn = 4,
     Zn = 5,
 }
+
+pub const NB_DIRECTIONS: u8 = 6;
 
 #[repr(u8)]
 #[derive(FromPrimitive, Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -141,9 +198,9 @@ impl FineDirection {
     }
 
     pub fn outsider_direction_vec(pos: &Vec3, size: i64) -> Vec3 {
-        let x = Self::component(pos.x, size) as i64 - 1;
-        let y = Self::component(pos.y, size) as i64 - 1;
-        let z = Self::component(pos.z, size) as i64 - 1;
+        let x = Self::component(pos.x, size / 2) as i64 - 1;
+        let y = Self::component(pos.y, size / 2) as i64 - 1;
+        let z = Self::component(pos.z, size / 2) as i64 - 1;
         Vec3 { x, y, z }
     }
 
@@ -208,7 +265,7 @@ impl Quadrant {
         let x = self.x_p() as i64 + direction.x;
         let y = self.y_p() as i64 + direction.y;
         let z = self.z_p() as i64 + direction.z;
-        if x > 2 || y > 2 || z > 2 || x < 0 || y < 0 || z < 0 {
+        if x > 1 || y > 1 || z > 1 || x < 0 || y < 0 || z < 0 {
             None
         } else {
             let val = (x << 2) + (y << 1) + z;
@@ -222,6 +279,13 @@ impl Quadrant {
         let z = self.z_p() ^ (direction.z != 0);
         let val = ((x as u8) << 2) + ((y as u8) << 1) + z as u8;
         num::FromPrimitive::from_u8(val).unwrap()
+    }
+
+    pub fn match_direction(&self, direction: Vec3) -> bool {
+        let x = (self.x_p() && (direction.x >= 0)) || (!self.x_p() && (direction.x <= 0));
+        let y = (self.y_p() && (direction.y >= 0)) || (!self.y_p() && (direction.y <= 0));
+        let z = (self.z_p() && (direction.z >= 0)) || (!self.z_p() && (direction.z <= 0));
+        x && y && z
     }
 }
 
@@ -253,6 +317,10 @@ impl Sphere {
             center: self.center.sub(&v),
             radius: self.radius,
         }
+    }
+
+    pub fn move_by(&mut self, shift: &Vec3) {
+        self.center = self.center.add(shift);
     }
 
     pub fn is_inside_quadrant(&self, cell_size: i64, quadrant: usize) -> bool {
