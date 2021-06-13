@@ -1,5 +1,8 @@
-use crate::entity::Entity;
-use crate::geometry::{Cube, FineDirection, Quadrant, Vec3, NB_QUADRANTS};
+use crate::{
+    entity::{Entity, EntityData},
+    geometry::{Cube, FineDirection, Quadrant, Sphere, Vec3, NB_QUADRANTS},
+    voxel_grid::VoxelGridSpace,
+};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum CellPart {
@@ -134,7 +137,6 @@ impl MatterTree {
         for (i, entity) in self.entities.iter_mut().enumerate() {
             // Check if entity should change cell
             let cell_part = entity.get_containing_cell_part(&self.area);
-            println!("Cell part: {:?}", cell_part);
             match cell_part {
                 CellPart::MultiQuadrant => (),
                 CellPart::PartlyOutside => {
@@ -284,6 +286,37 @@ impl MatterTree {
         }
     }
 
+    pub fn run_actions(&mut self) {
+        for i in 0..self.entities.len() {
+            let drop_rock = match &self.entities[i].entity {
+                EntityData::Player(player) => player.borrow().drop_block,
+                _ => false,
+            };
+            if drop_rock {
+                let rock = {
+                    let player = &self.entities[i];
+                    let grid = VoxelGridSpace::new();
+                    let mut entity = Entity::new(
+                        Sphere {
+                            center: player.bounding_sphere.center.sub(&player.speed),
+                            radius: 1,
+                        },
+                        EntityData::Voxels(Box::new(grid)),
+                    );
+                    entity.speed = player.speed;
+                    entity
+                };
+                self.entities.push(Box::new(rock));
+            }
+        }
+
+        for sub_tree in self.sub_trees.iter_mut() {
+            if let Some(tree) = sub_tree {
+                tree.run_actions();
+            }
+        }
+    }
+
     pub fn run_movements(&mut self) {
         for entity in self.entities.iter_mut() {
             entity.run_movement();
@@ -293,5 +326,27 @@ impl MatterTree {
                 tree.run_movements();
             }
         }
+    }
+
+    pub fn nb_nodes(&self) -> usize {
+        self.sub_trees
+            .iter()
+            .map(|opt| match opt {
+                Some(tree) => tree.nb_nodes(),
+                None => 0,
+            })
+            .sum()
+    }
+
+    pub fn nb_entities(&self) -> usize {
+        self.entities.len()
+            + self
+                .sub_trees
+                .iter()
+                .map(|opt| match opt {
+                    Some(tree) => tree.nb_entities(),
+                    None => 0,
+                })
+                .sum::<usize>()
     }
 }

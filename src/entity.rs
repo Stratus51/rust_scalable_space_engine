@@ -139,6 +139,7 @@ impl Entity {
             .bounding_sphere
             .center
             .sub(&direction.mul_scalar(cell_size));
+        println!("switch_space_tree > {:?}", self.bounding_sphere.center);
     }
 }
 
@@ -156,10 +157,10 @@ impl Entity {
             self.speed = self.speed.add(&self.external_forces.div_float(self.mass));
         }
         self.external_forces = Vec3::ZERO;
-        println!(
-            "Entity: mass = {} | speed = {:?} | pos = {:?} | forces = {:?} | force_add: {:?}",
-            self.mass, self.speed, self.bounding_sphere.center, self.external_forces, force_add
-        );
+        // println!(
+        //     "Entity: mass = {} | speed = {:?} | pos = {:?} | forces = {:?} | force_add: {:?}",
+        //     self.mass, self.speed, self.bounding_sphere.center, self.external_forces, force_add
+        // );
     }
 
     pub fn check_collision(&self, other: &mut Self) -> bool {

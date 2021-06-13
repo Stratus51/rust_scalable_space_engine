@@ -1,5 +1,5 @@
 use crate::{
-    geometry::{Mat3, Vec3, NB_QUADRANTS},
+    geometry::{Mat3, NB_QUADRANTS},
     matter_tree::MatterTree,
 };
 
@@ -37,7 +37,7 @@ pub struct VoxelGridSpace {
 }
 
 impl VoxelGridSpace {
-    fn new(pos: Vec3) -> Self {
+    pub fn new() -> Self {
         Self {
             voxels: VoxelTree::new_chunk(),
             local_space: MatterTree::new(),

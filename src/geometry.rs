@@ -51,14 +51,9 @@ impl Vec3 {
     pub fn is_inside_centered_cube(&self, side_length: i64) -> bool {
         let min = -side_length / 2;
         let max = side_length / 2 - 1;
-        let ret = (self.x > min && self.x < max)
-            && (self.y > min && self.y < max)
-            && (self.z > min && self.z < max);
-        println!(
-            "is_inside_centered_cube: side = {} | min = {} | max = {} | ret = {}",
-            side_length, min, max, ret
-        );
-        ret
+        (self.x >= min && self.x <= max)
+            && (self.y >= min && self.y <= max)
+            && (self.z >= min && self.z <= max)
     }
 
     pub fn get_quadrant(&self) -> Quadrant {

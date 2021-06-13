@@ -16,6 +16,7 @@ pub struct SpaceTreeParent {
 
 impl SpaceTreeParent {
     fn build_sub_tree(&self) -> Box<SpaceTree> {
+        println!("build_sub_tree");
         Box::new(if self.scale == 0 {
             SpaceTree::Matter(MatterTree::new())
         } else {
@@ -77,12 +78,7 @@ impl SpaceTree {
             &entity.bounding_sphere.center,
             MatterTree::MAX_SIZE,
         );
-        let old_pos = entity.bounding_sphere.center;
         entity.switch_space_tree(direction, MatterTree::MAX_SIZE);
-        println!(
-            "Moved outsider to {:?} | {:?} => {:?}",
-            direction, old_pos, entity.bounding_sphere.center
-        );
         EntityToDisplaceUp {
             path: vec![],
             direction,
@@ -102,14 +98,29 @@ impl SpaceTree {
                     relocate[i].push(entity);
                 }
                 for (i, entities) in relocate.into_iter().enumerate() {
-                    if parent.sub_trees[i].is_none() {
-                        parent.sub_trees[i] = Some(parent.build_sub_tree());
+                    if !entities.is_empty() {
+                        if parent.sub_trees[i].is_none() {
+                            parent.sub_trees[i] = Some(parent.build_sub_tree());
+                        }
+                        // TODO Is there a cleaner Rust way to write this?
+                        parent.sub_trees[i]
+                            .as_mut()
+                            .unwrap()
+                            .relocate_entities(entities);
                     }
-                    // TODO Is there a cleaner Rust way to write this?
-                    parent.sub_trees[i]
-                        .as_mut()
-                        .unwrap()
-                        .relocate_entities(entities);
+                }
+            }
+        }
+    }
+
+    fn run_actions(&mut self) {
+        match self {
+            Self::Matter(matter) => matter.run_actions(),
+            Self::Parent(tree) => {
+                for sub_tree in tree.sub_trees.iter_mut() {
+                    if let Some(tree) = sub_tree {
+                        tree.run_actions();
+                    }
                 }
             }
         }
@@ -164,12 +175,14 @@ impl SpaceTree {
                     }
                 }
                 for (i, entities) in relocate.into_iter().enumerate() {
-                    if parent.sub_trees[i].is_none() {
-                        parent.sub_trees[i] = Some(parent.build_sub_tree());
+                    if !entities.is_empty() {
+                        if parent.sub_trees[i].is_none() {
+                            parent.sub_trees[i] = Some(parent.build_sub_tree());
+                        }
+                        // TODO Is there a cleaner Rust way to write this?
+                        let sub_tree = parent.sub_trees[i].as_mut().unwrap();
+                        sub_tree.relocate_entities(entities);
                     }
-                    // TODO Is there a cleaner Rust way to write this?
-                    let sub_tree = parent.sub_trees[i].as_mut().unwrap();
-                    sub_tree.relocate_entities(entities);
                 }
                 outsiders
             }
@@ -181,7 +194,8 @@ impl SpaceTree {
             // Clean empty quadrants
             for i in 0..NB_QUADRANTS {
                 let mut need_emptying = false;
-                if let Some(quad) = parent.sub_trees[i].as_ref() {
+                if let Some(quad) = parent.sub_trees[i].as_mut() {
+                    quad.clean_empty_children();
                     if quad.is_empty() {
                         need_emptying = true;
                     }
@@ -190,6 +204,48 @@ impl SpaceTree {
                     parent.sub_trees[i] = None;
                 }
             }
+        }
+    }
+
+    fn nb_nodes(&self) -> usize {
+        match self {
+            Self::Matter(_) => 1,
+            Self::Parent(parent) => parent
+                .sub_trees
+                .iter()
+                .map(|opt| match opt {
+                    Some(tree) => tree.nb_nodes(),
+                    None => 0,
+                })
+                .sum(),
+        }
+    }
+
+    fn nb_matter_nodes(&self) -> usize {
+        match self {
+            Self::Matter(matter) => matter.nb_nodes(),
+            Self::Parent(parent) => parent
+                .sub_trees
+                .iter()
+                .map(|opt| match opt {
+                    Some(tree) => tree.nb_nodes(),
+                    None => 0,
+                })
+                .sum(),
+        }
+    }
+
+    fn nb_entities(&self) -> usize {
+        match self {
+            Self::Matter(matter) => matter.nb_entities(),
+            Self::Parent(parent) => parent
+                .sub_trees
+                .iter()
+                .map(|opt| match opt {
+                    Some(tree) => tree.nb_entities(),
+                    None => 0,
+                })
+                .sum(),
         }
     }
 }
@@ -241,11 +297,16 @@ impl GrowableSpaceTree {
         (opposite_quadrant.invert(), dirs_consumed)
     }
 
+    pub fn run_actions(&mut self) {
+        self.tree.run_actions();
+    }
+
     pub fn run_movements(&mut self) {
         self.tree.run_movements();
     }
 
     pub fn refresh(&mut self) {
+        println!("refresh");
         let mut outsiders = self.tree.refresh();
 
         // Check in which directions the ousiders are
@@ -262,6 +323,7 @@ impl GrowableSpaceTree {
         }
 
         // While some outsiders are outside
+        println!("Grow space");
         while nb_expansion_dirs > 0 {
             // Pick a direction for space growth
             let (child_quadrant, dirs_consumed) =
@@ -294,7 +356,12 @@ impl GrowableSpaceTree {
             self.tree.relocate_entities(new_insiders);
         }
 
+        // Cleanup useless children levels
+        println!("Cleanup space");
+        self.tree.clean_empty_children();
+
         // Cleanup useless parent levels
+        println!("Shrink space");
         loop {
             let child = match self.tree.as_mut() {
                 SpaceTree::Matter(_) => break,
@@ -324,8 +391,17 @@ impl GrowableSpaceTree {
             };
             self.tree = child;
         }
+    }
 
-        // Cleanup useless children levels
-        self.tree.clean_empty_children();
+    pub fn nb_nodes(&self) -> usize {
+        self.tree.nb_nodes()
+    }
+
+    pub fn nb_matter_nodes(&self) -> usize {
+        self.tree.nb_matter_nodes()
+    }
+
+    pub fn nb_entities(&self) -> usize {
+        self.tree.nb_entities()
     }
 }

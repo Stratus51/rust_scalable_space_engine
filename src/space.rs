@@ -13,6 +13,7 @@ impl Space {
     }
 
     pub fn run(&mut self) {
+        self.tree.run_actions();
         self.tree.run_movements();
         self.tree.refresh();
     }

@@ -12,7 +12,7 @@ mod space_tree;
 mod voxel_grid;
 
 use entity::{Entity, EntityData};
-use geometry::{Quadrant, Sphere, Vec3};
+use geometry::{Quadrant, Vec3};
 use matter_tree::MatterTree;
 use space::Space;
 use space_tree::SpaceTree;
@@ -48,7 +48,7 @@ fn draw_matter_tree(
 ) {
     for y in 0..area.h {
         for x in 0..area.w {
-            let offset = (area.y + y) * WIDTH + area.x + x;
+            let offset = (HEIGHT - 1 - (area.y + y)) * WIDTH + area.x + x;
             if x == 0 || y == 0 || x == area.w - 1 || y == area.h - 1 {
                 buffer[offset] = colors.matter_node;
             }
@@ -81,14 +81,14 @@ fn draw_matter_tree(
             EntityData::Voxels(_) => colors.voxels,
         };
 
-        const dot_size: isize = 2;
+        const DOT_SIZE: isize = 2;
         for y_i in
-            isize::max(y as isize - dot_size, 0)..isize::min(y as isize + dot_size, HEIGHT as isize)
+            isize::max(y as isize - DOT_SIZE, 0)..isize::min(y as isize + DOT_SIZE, HEIGHT as isize)
         {
-            for x_i in isize::max(x as isize - dot_size, 0)
-                ..isize::min(x as isize + dot_size, WIDTH as isize)
+            for x_i in isize::max(x as isize - DOT_SIZE, 0)
+                ..isize::min(x as isize + DOT_SIZE, WIDTH as isize)
             {
-                let offset = y_i as usize * WIDTH + x_i as usize;
+                let offset = (HEIGHT - 1 - y_i as usize) * WIDTH + x_i as usize;
                 buffer[offset] = color;
             }
         }
@@ -114,7 +114,7 @@ fn draw_matter_tree(
 fn draw_space_tree(colors: &Colors, buffer: &mut [u32], area: Rect, tree: &SpaceTree) {
     for y in 0..area.h {
         for x in 0..area.w {
-            let offset = (area.y + y) * WIDTH + area.x + x;
+            let offset = (HEIGHT - 1 - (area.y + y)) * WIDTH + area.x + x;
             if x == 0 || y == 0 || x == area.w - 1 || y == area.h - 1 {
                 buffer[offset] = colors.space_node;
             }
@@ -210,7 +210,11 @@ fn main() {
             if window.is_key_down(Key::Down) {
                 control_dir.y -= 1;
             }
-            player.borrow_mut().control(&control_dir);
+            let drop_block = window.is_key_down(Key::Space);
+
+            let mut player = player.borrow_mut();
+            player.control(&control_dir);
+            player.drop_block = drop_block;
         }
 
         space.run();
