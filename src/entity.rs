@@ -100,7 +100,7 @@ impl Entity {
         }
 
         for i in 0..NB_QUADRANTS {
-            if relative_sphere.is_inside_quadrant(area_size, i) {
+            if relative_sphere.is_inside_quadrant(area, i) {
                 return CellPart::Quadrant(num::FromPrimitive::from_usize(i).unwrap());
             }
         }
@@ -139,7 +139,6 @@ impl Entity {
             .bounding_sphere
             .center
             .sub(&direction.mul_scalar(cell_size));
-        println!("switch_space_tree > {:?}", self.bounding_sphere.center);
     }
 }
 
@@ -165,7 +164,46 @@ impl Entity {
 
     pub fn check_collision(&self, other: &mut Self) -> bool {
         // TODO
-        false
+        true
+    }
+
+    pub fn bounce(&mut self, other: &mut Self) {
+        let inter_center = self
+            .bounding_sphere
+            .center
+            .sub(&other.bounding_sphere.center);
+        let inter_center_length = inter_center.length_f64();
+        let self_inter_speed_value = self.speed.dot_f64(&inter_center) / inter_center_length;
+        let other_inter_speed_value = other.speed.dot_f64(&inter_center) / inter_center_length;
+        let total_inter_momentum =
+            self_inter_speed_value * self.mass + other_inter_speed_value * other.mass;
+        let total_mass = self.mass + other.mass;
+
+        let self_resulting_momentum = total_inter_momentum * self.mass / total_mass;
+        let other_resulting_momentum = total_inter_momentum * other.mass / total_mass;
+
+        let self_resulting_inter_speed = inter_center
+            .mul_scalar((self_resulting_momentum / self.mass) as i64)
+            .div_scalar(inter_center_length as i64);
+        let other_resulting_inter_speed = inter_center
+            .mul_scalar((other_resulting_momentum / other.mass) as i64)
+            .div_scalar(inter_center_length as i64);
+
+        let self_inter_speed = inter_center
+            .mul_scalar(self_inter_speed_value as i64)
+            .div_scalar(inter_center_length as i64);
+        let other_inter_speed = inter_center
+            .mul_scalar(-other_inter_speed_value as i64)
+            .div_scalar(inter_center_length as i64);
+
+        self.speed = self
+            .speed
+            .sub(&self_inter_speed)
+            .add(&self_resulting_inter_speed);
+        other.speed = other
+            .speed
+            .sub(&other_inter_speed)
+            .add(&other_resulting_inter_speed);
     }
 
     pub fn apply_collision(&mut self, other: &mut Self) {
@@ -174,5 +212,6 @@ impl Entity {
         }
 
         // TODO
+        self.bounce(other);
     }
 }

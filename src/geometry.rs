@@ -48,6 +48,12 @@ impl Vec3 {
         }
     }
 
+    pub fn dot_f64(&self, other: &Self) -> f64 {
+        self.x as f64 * other.x as f64
+            + self.y as f64 * other.y as f64
+            + self.z as f64 * other.z as f64
+    }
+
     pub fn is_inside_centered_cube(&self, side_length: i64) -> bool {
         let min = -side_length / 2;
         let max = side_length / 2 - 1;
@@ -80,7 +86,7 @@ impl Vec3 {
         ret
     }
 
-    pub fn distance(&self) -> f64 {
+    pub fn length_f64(&self) -> f64 {
         let x = self.x as f64;
         let y = self.y as f64;
         let z = self.z as f64;
@@ -318,22 +324,29 @@ impl Sphere {
         self.center = self.center.add(shift);
     }
 
-    pub fn is_inside_quadrant(&self, cell_size: i64, quadrant: usize) -> bool {
-        let half_size = cell_size / 2;
-        let half_vec = Vec3 {
-            x: half_size,
-            y: half_size,
-            z: half_size,
+    pub fn is_inside_quadrant(&self, cell_area: &Cube, quadrant: usize) -> bool {
+        let half_size = cell_area.size / 2;
+        let quarter_size = half_size / 2;
+        let quarter_vec = Vec3 {
+            x: quarter_size,
+            y: quarter_size,
+            z: quarter_size,
         };
         let shift = Vec3 {
-            x: (quadrant as i64 & (1 << 2)) as i64,
-            y: (quadrant as i64 & (1 << 2)) as i64,
-            z: (quadrant as i64 & (1 << 2)) as i64,
+            x: (quadrant as i64 & (1 << 2) != 0) as i64,
+            y: (quadrant as i64 & (1 << 1) != 0) as i64,
+            z: (quadrant as i64 & (1 << 0) != 0) as i64,
         }
-        .mul_scalar(cell_size)
-        .sub(&half_vec);
+        .mul_scalar(half_size)
+        .sub(&quarter_vec);
         let shifted_center = self.center.sub(&shift);
         shifted_center.is_inside_centered_cube(half_size - self.radius)
+    }
+
+    pub fn intersects(&self, other: &Sphere) -> bool {
+        let dist = self.center.sub(&other.center).length_f64();
+        let limit_dist = self.radius + other.radius;
+        dist < limit_dist as f64
     }
 }
 

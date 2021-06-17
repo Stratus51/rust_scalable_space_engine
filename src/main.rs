@@ -21,8 +21,8 @@ use minifb::Key;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-const WIDTH: usize = 640;
-const HEIGHT: usize = 360;
+const WIDTH: usize = 500;
+const HEIGHT: usize = 500;
 
 struct Colors {
     space_node: u32,
@@ -66,27 +66,21 @@ fn draw_matter_tree(
         let x = x as usize;
         let y = y as usize;
         let color = match entity.entity {
-            EntityData::Player(_) => {
-                println!(
-                    "Print player: {}x{} => {}x{} (MAX = {} | WIDTH = {})",
-                    pos.x,
-                    pos.y,
-                    x,
-                    y,
-                    MatterTree::MAX_SIZE,
-                    WIDTH
-                );
-                colors.player
-            }
+            EntityData::Player(_) => colors.player,
             EntityData::Voxels(_) => colors.voxels,
         };
 
-        const DOT_SIZE: isize = 2;
+        let dot_size: isize = usize::max(
+            1,
+            entity.bounding_sphere.radius as usize * matter_area.w / MatterTree::MAX_SIZE as usize,
+        ) as isize;
         for y_i in
-            isize::max(y as isize - DOT_SIZE, 0)..isize::min(y as isize + DOT_SIZE, HEIGHT as isize)
+            isize::max(y as isize - dot_size, 0)..isize::min(y as isize + dot_size, HEIGHT as isize)
         {
-            for x_i in isize::max(x as isize - DOT_SIZE, 0)
-                ..isize::min(x as isize + DOT_SIZE, WIDTH as isize)
+            let y_shift = y_i - y as isize;
+            let x_size = f32::sqrt((dot_size * dot_size - y_shift * y_shift) as f32) as isize;
+            for x_i in
+                isize::max(x as isize - x_size, 0)..isize::min(x as isize + x_size, WIDTH as isize)
             {
                 let offset = (HEIGHT - 1 - y_i as usize) * WIDTH + x_i as usize;
                 buffer[offset] = color;
@@ -146,7 +140,7 @@ fn draw_space_tree(colors: &Colors, buffer: &mut [u32], area: Rect, tree: &Space
 fn draw_space(colors: &Colors, buffer: &mut [u32], space: &Space) {
     // Wipe board
     for i in buffer.iter_mut() {
-        *i = 0xFFFFFFFF;
+        *i = 0x00000000;
     }
 
     draw_space_tree(
@@ -168,7 +162,7 @@ fn main() {
 
     if let SpaceTree::Matter(matter) = space.tree.tree.as_mut() {
         matter.add_entities(vec![Box::new(Entity::new_player(
-            Vec3 { x: 0, y: 0, z: 0 },
+            Vec3 { x: 0, y: 0, z: 500 },
             player.clone(),
         ))]);
     }
@@ -195,6 +189,8 @@ fn main() {
     // imit to max ~60 fps update rate
     window.limit_update_rate(Some(std::time::Duration::from_micros(16600)));
 
+    const DROP_BLOCK_COOLDOWN: usize = 60;
+    let mut drop_block_cooldown = None;
     while window.is_open() && !window.is_key_down(minifb::Key::Escape) {
         {
             let mut control_dir = Vec3::ZERO;
@@ -210,11 +206,32 @@ fn main() {
             if window.is_key_down(Key::Down) {
                 control_dir.y -= 1;
             }
-            let drop_block = window.is_key_down(Key::Space);
 
             let mut player = player.borrow_mut();
             player.control(&control_dir);
-            player.drop_block = drop_block;
+            let replacement = match &mut drop_block_cooldown {
+                None => {
+                    if window.is_key_down(Key::Space) {
+                        player.drop_block = true;
+                        player.drop_block_fixed = window.is_key_down(Key::LeftCtrl);
+                        Some(Some(DROP_BLOCK_COOLDOWN))
+                    } else {
+                        None
+                    }
+                }
+                Some(n) => {
+                    player.drop_block = false;
+                    *n -= 1;
+                    if *n == 0 {
+                        Some(None)
+                    } else {
+                        None
+                    }
+                }
+            };
+            if let Some(replacement) = replacement {
+                drop_block_cooldown = replacement;
+            }
         }
 
         space.run();

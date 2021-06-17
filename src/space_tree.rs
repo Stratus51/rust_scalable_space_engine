@@ -16,7 +16,6 @@ pub struct SpaceTreeParent {
 
 impl SpaceTreeParent {
     fn build_sub_tree(&self) -> Box<SpaceTree> {
-        println!("build_sub_tree");
         Box::new(if self.scale == 0 {
             SpaceTree::Matter(MatterTree::new())
         } else {
@@ -135,6 +134,98 @@ impl SpaceTree {
                         tree.run_movements();
                     }
                 }
+            }
+        }
+    }
+
+    fn apply_neighbourhood_collisions(&mut self) {
+        match self {
+            Self::Matter(matter) => matter.apply_neighbourhood_collisions(),
+            Self::Parent(tree) => {
+                for sub_tree in tree.sub_trees.iter_mut() {
+                    if let Some(tree) = sub_tree {
+                        tree.apply_neighbourhood_collisions();
+                    }
+                }
+            }
+        }
+    }
+
+    fn apply_external_collisions(&mut self, outsiders: &mut [&mut Box<Entity>]) {
+        match self {
+            Self::Matter(matter) => matter.apply_external_collisions(outsiders),
+            Self::Parent(tree) => {
+                for sub_tree in tree.sub_trees.iter_mut() {
+                    if let Some(tree) = sub_tree {
+                        tree.apply_external_collisions(outsiders);
+                    }
+                }
+            }
+        }
+    }
+
+    fn apply_inter_neighbourhood_collisions(
+        &mut self,
+    ) -> Vec<(&mut Box<Entity>, Vec<FineDirection>)> {
+        match self {
+            Self::Matter(matter) => matter.get_entities_touching_outside(),
+            Self::Parent(parent) => {
+                // TODO Not working. Requires full refactor.
+                // let mut outsiders = vec![];
+                // let mut insiders = vec![];
+                // for (quad_i, sub_tree) in parent.sub_trees.iter_mut().enumerate() {
+                //     let quad: Quadrant = num::FromPrimitive::from_usize(quad_i).unwrap();
+                //     if let Some(tree) = sub_tree {
+                //         for (overflower, dirs) in tree.apply_inter_neighbourhood_collisions() {
+                //             let mut inside_quadrants = vec![];
+                //             let mut remaining_dirs = vec![];
+                //             for dir in dirs.into_iter() {
+                //                 if let Some(dest_quad) = quad.move_to(dir.equivalent_vec()) {
+                //                     inside_quadrants.push(dest_quad);
+                //                 } else {
+                //                     remaining_dirs.push(dir);
+                //                 }
+                //             }
+                //             if inside_quadrants.is_empty() {
+                //                 outsiders.push((overflower, remaining_dirs));
+                //             } else {
+                //                 insiders.push((overflower, inside_quadrants, remaining_dirs));
+                //             }
+                //         }
+                //     }
+                // }
+
+                // // TODO See if there is a safe way to keep this optimization
+                // unsafe {
+                //     for i in 0..NB_QUADRANTS {
+                //         let quad = num::FromPrimitive::from_usize(i).unwrap();
+                //         let mut insiders: Vec<_> = insiders
+                //             .iter_mut()
+                //             .filter_map(|(entity, target_quads, _)| {
+                //                 if target_quads.contains(&quad) {
+                //                     Some(*entity)
+                //                 } else {
+                //                     None
+                //                 }
+                //             })
+                //             .collect();
+                //         if !insiders.is_empty() {
+                //             let parent = parent as *mut SpaceTreeParent;
+                //             if let Some(tree) = (*parent).sub_trees[i].as_mut() {
+                //                 tree.apply_external_collisions(&mut insiders[..]);
+                //             }
+                //         }
+                //     }
+                // }
+
+                // for (insider, _, dirs) in insiders.into_iter() {
+                //     if !dirs.is_empty() {
+                //         outsiders.push((insider, dirs));
+                //     }
+                // }
+
+                // outsiders
+                vec![]
             }
         }
     }
@@ -306,7 +397,6 @@ impl GrowableSpaceTree {
     }
 
     pub fn refresh(&mut self) {
-        println!("refresh");
         let mut outsiders = self.tree.refresh();
 
         // Check in which directions the ousiders are
@@ -323,7 +413,9 @@ impl GrowableSpaceTree {
         }
 
         // While some outsiders are outside
-        println!("Grow space");
+        if outsiders.len() > nb_expansion_dirs {
+            panic!("{} | {:?}", nb_expansion_dirs, outsiders);
+        }
         while nb_expansion_dirs > 0 {
             // Pick a direction for space growth
             let (child_quadrant, dirs_consumed) =
@@ -357,11 +449,9 @@ impl GrowableSpaceTree {
         }
 
         // Cleanup useless children levels
-        println!("Cleanup space");
         self.tree.clean_empty_children();
 
         // Cleanup useless parent levels
-        println!("Shrink space");
         loop {
             let child = match self.tree.as_mut() {
                 SpaceTree::Matter(_) => break,

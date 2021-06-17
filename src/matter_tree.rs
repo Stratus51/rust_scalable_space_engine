@@ -35,7 +35,7 @@ impl MatterTree {
         - 1 // Remove sign
         - Self::MIN_SIZE_POW as u32 // Remove scales taken up by min size cells
         - 1 // Margin
-        - 50; // Manual testing
+        - 47; // Manual testing
     pub const MAX_SIZE: i64 = 1 << (Self::MIN_SIZE_POW + Self::MAX_SCALE as i64);
     const NONE_SPACE_CELL: Option<Box<Self>> = None;
 
@@ -101,14 +101,14 @@ impl MatterTree {
 
     pub fn add_entities(&mut self, entities: Entities) {
         // TODO Is that the right condition to decide whether to split the space?
-        if self.entities.len() + entities.len() <= 1 || self.scale == 0 {
+        if self.scale == 0 || self.nb_entities() + entities.len() <= 1 {
             self.entities.extend(entities);
         } else {
             let mut per_quadrant = vec![vec![]; NB_QUADRANTS];
             for entity in entities.into_iter() {
                 let relative_sphere = entity.bounding_sphere.sub_to_center(&self.center());
                 let quadrant = Quadrant::from_pos(&relative_sphere.center);
-                if relative_sphere.is_inside_quadrant(self.area.size, quadrant as usize) {
+                if relative_sphere.is_inside_quadrant(&self.area, quadrant as usize) {
                     per_quadrant[quadrant as usize].push(entity);
                 } else {
                     self.entities.push(entity);
@@ -134,7 +134,7 @@ impl MatterTree {
         let mut quitters = vec![];
 
         // Run each entity dynamics and catch crossing cell boundaries
-        for (i, entity) in self.entities.iter_mut().enumerate() {
+        for (i, entity) in self.entities.iter().enumerate() {
             // Check if entity should change cell
             let cell_part = entity.get_containing_cell_part(&self.area);
             match cell_part {
@@ -155,6 +155,7 @@ impl MatterTree {
 
         // Apply entity cell boundary crossing
         let mut insiders = vec![vec![]; NB_QUADRANTS];
+        let mut nb_insiders = 0;
         let mut outsiders = vec![];
         for (i, quitter) in quitters.into_iter().rev() {
             let entity = self.entities.remove(i);
@@ -162,6 +163,7 @@ impl MatterTree {
                 QuadrantMoveOperation::ToUpperCell => outsiders.push(entity),
                 QuadrantMoveOperation::ToSubCell { quadrant } => {
                     insiders[quadrant as usize].push(entity);
+                    nb_insiders += 1;
                 }
             }
         }
@@ -184,6 +186,8 @@ impl MatterTree {
                             CellPart::PartlyOutside => {
                                 if self.scale < Self::MAX_SCALE {
                                     outsiders.push(entity);
+                                } else {
+                                    entities.push(entity);
                                 }
                             }
                             CellPart::CenterOutside => {
@@ -192,6 +196,9 @@ impl MatterTree {
                             CellPart::Quadrant(quadrant) => {
                                 if self.scale > 0 {
                                     insiders[quadrant as usize].push(entity);
+                                    nb_insiders += 1;
+                                } else {
+                                    outsiders.push(entity);
                                 }
                             }
                         }
@@ -200,7 +207,7 @@ impl MatterTree {
             }
         }
 
-        if self.entities.len() + insiders.iter().map(|v| v.len()).sum::<usize>() == 1 {
+        if self.nb_entities() + nb_insiders <= 1 {
             for insider in insiders.into_iter() {
                 self.entities.extend(insider);
             }
@@ -225,6 +232,26 @@ impl MatterTree {
             }
             if need_emptying {
                 self.sub_trees[i] = None;
+            }
+        }
+
+        // Clean useless fragmentation levels
+        if self.entities.is_empty() && self.nb_entities() == 1 {
+            for i in 0..NB_QUADRANTS {
+                let found = if let Some(quad) = self.sub_trees[i].as_mut() {
+                    if !quad.is_empty() {
+                        self.entities.push(quad.entities.pop().unwrap());
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                };
+                if found {
+                    self.sub_trees[i] = None;
+                    break;
+                }
             }
         }
 
@@ -281,16 +308,20 @@ impl MatterTree {
     pub fn apply_external_collisions(&mut self, outsiders: &mut [&mut Box<Entity>]) {
         for a in self.entities.iter_mut() {
             for b in outsiders.iter_mut() {
-                a.apply_collision(b);
+                if a.bounding_sphere.intersects(&b.bounding_sphere) {
+                    a.apply_collision(b);
+                }
             }
         }
     }
 
     pub fn run_actions(&mut self) {
         for i in 0..self.entities.len() {
-            let drop_rock = match &self.entities[i].entity {
-                EntityData::Player(player) => player.borrow().drop_block,
-                _ => false,
+            let (drop_rock, fixed) = match &self.entities[i].entity {
+                EntityData::Player(player) => {
+                    (player.borrow().drop_block, player.borrow().drop_block_fixed)
+                }
+                _ => (false, false),
             };
             if drop_rock {
                 let rock = {
@@ -303,7 +334,9 @@ impl MatterTree {
                         },
                         EntityData::Voxels(Box::new(grid)),
                     );
-                    entity.speed = player.speed;
+                    if !fixed {
+                        entity.speed = player.speed;
+                    }
                     entity
                 };
                 self.entities.push(Box::new(rock));
@@ -329,13 +362,16 @@ impl MatterTree {
     }
 
     pub fn nb_nodes(&self) -> usize {
-        self.sub_trees
-            .iter()
-            .map(|opt| match opt {
-                Some(tree) => tree.nb_nodes(),
-                None => 0,
-            })
-            .sum()
+        usize::max(
+            self.sub_trees
+                .iter()
+                .map(|opt| match opt {
+                    Some(tree) => tree.nb_nodes(),
+                    None => 0,
+                })
+                .sum(),
+            1,
+        )
     }
 
     pub fn nb_entities(&self) -> usize {
